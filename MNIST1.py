@@ -1,0 +1,111 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Nov  4 13:41:48 2018
+
+@author: ieada
+"""
+
+import numpy as np
+from torch.autograd import Variable
+import torch
+import torch.utils.data
+import torch.nn.functional as F
+import pandas as pd
+
+batch_size = 64
+#train_loader = torch.utils.data.DataLoader(
+#        datasets.MNIST('../MNIST/train.csv', train=True, download=True, transform=transforms.compose([
+#                transforms.ToTensor()])), batch_size=batch_size, shuffle=True)
+#
+#test_loader = torch.utils.data.DataLoader(
+#        datasets.MNIST('../MNIST/test.csv', train=False, transform=transforms.compose([
+#                transforms.ToTensor()])), batch_size=batch_size, shuffle=True)
+
+train = pd.read_csv(r"../MNIST/train.csv",dtype = np.float32)
+targets_train = train.label.values
+features_train = train.loc[:,train.columns != "label"].values/255 # normalization
+
+test = pd.read_csv(r"../MNIST/test.csv",dtype = np.float32)
+targets_test = train.label.values
+features_test = train.loc[:,train.columns != "label"].values/255 # normalization
+
+# create feature and targets tensor for train set. As you remember we need variable to accumulate gradients. Therefore first we create tensor, then we will create variable
+featuresTrain = torch.from_numpy(features_train)
+targetsTrain = torch.from_numpy(targets_train).type(torch.LongTensor) # data type is long
+
+# create feature and targets tensor for test set.
+featuresTest = torch.from_numpy(features_test)
+targetsTest = torch.from_numpy(targets_test).type(torch.LongTensor) # data type is long
+
+# batch_size, epoch and iteration
+batch_size = 100
+n_iters = 10000
+print(len(features_train))
+num_epochs = n_iters / (len(features_train) / batch_size)
+num_epochs = int(num_epochs)
+print(num_epochs)
+
+# Pytorch train and test sets
+train = torch.utils.data.TensorDataset(featuresTrain,targetsTrain)
+test = torch.utils.data.TensorDataset(featuresTest,targetsTest)
+
+# data loader
+train_loader = torch.utils.data.DataLoader(train, batch_size = batch_size, shuffle = True)
+test_loader = torch.utils.data.DataLoader(test, batch_size = batch_size, shuffle = True)
+
+#print('*')
+class Net(torch.nn.Module):
+    print('*')
+    def __init__(self):
+        super(Net, self).__init__()
+        self.l1 = torch.nn.Linear(784, 520)
+        self.l2 = torch.nn.Linear(520, 320)
+        self.l3 = torch.nn.Linear(320, 240)
+        self.l4 = torch.nn.Linear(240, 120)
+        self.l5 = torch.nn.Linear(120, 10)
+        
+    def forward(self, x):
+        x = x.view(-1, 784)
+        x= F.relu(self.l1(x))
+        x= F.relu(self.l2(x))
+        x= F.relu(self.l3(x))
+        x= F.relu(self.l4(x))
+        return self.l5(x)
+
+model = Net()
+
+criterion = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.SGD(model.parameters(), lr = 0.01, momentum = 0.5)
+
+def train(epoch):
+    model.train()
+    
+    for batch_idx, (data, target) in enumerate(train_loader):
+        data, target = Variable(data), Variable(target)
+        optimizer.zero_grad()
+        output = model(data)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+        model
+        if batch_idx % 10 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}' .format(epoch, batch_idx*len(data), len(train_loader.dataset),100*batch_idx/len(train_loader), loss.data[0]))
+
+def test():
+    model.eval()
+    test_loss = 0
+    correct = 0
+    for data, target in test_loader:
+        data, target = Variable(data, volatile=True), Variable(target)
+        output = model(data)
+        test_loss += criterion(output, target).data[0]
+        pred = torch.max(output.data, 1)[1]
+        correct += (pred == target).sum()
+        
+    test_loss /= len(test_loader.dataset)
+    print('\nTest set: Average loss: {:.4f}, Accuracy {}/{} ({:.0f}%)\n'.format(test_loss, correct, len(test_loader.dataset), 100.* correct/ len(test_loader.dataset)))
+    
+for i in range(num_epochs):
+    train(i)
+    print(i)
+    test()
